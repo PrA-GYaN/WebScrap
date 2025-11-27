@@ -91,7 +91,7 @@ Simple step-by-step installation guide for Windows users.
 
 **Important:** Whenever you open a new command prompt to use the scraper, run the activate command again:
 ```cmd
-.venv\Scripts\activate.bat
+.venv\Scripts\activate
 ```
 
 ---
@@ -101,7 +101,7 @@ Simple step-by-step installation guide for Windows users.
 1. **Open Command Prompt (if not already open):**
    - If you created a virtual environment in Step 4, make sure it's activated
    - You should see `(.venv)` before your prompt
-   - If not, run: `.venv\Scripts\activate.bat`
+   - If not, run: `.venv\Scripts\activate`
 
 2. **Install Packages:**
    - In the command window, type:
@@ -151,7 +151,7 @@ Installation complete! The scraper is ready to use.
 3. Type `cmd` and press Enter
 4. **If you used virtual environment:** Activate it first:
    ```cmd
-   .venv\Scripts\activate.bat
+   .venv\Scripts\activate
    ```
 
 ### Basic Usage
