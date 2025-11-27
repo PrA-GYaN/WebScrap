@@ -163,8 +163,13 @@ python shopify_contact_scraper.py --country "USA" --no-headless
 
 **Search with more results:**
 ```cmd
-python shopify_contact_scraper.py --country "Canada" --max-results 20 --no-headless
+python shopify_contact_scraper.py --max-results 20 --no-headless --query "site:myshopify.com \"Canada\" contact"
 ```
+
+```cmd
+python shopify_contact_scraper.py --country "Canada" --max-results 20 --no-headless 
+```
+
 
 **Add Delay if blocked**
  ```cmd
