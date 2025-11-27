@@ -71,7 +71,7 @@ class ShopifyContactScraper:
     
     def search_google(self, query: str, max_results: int = 10) -> List[str]:
         """
-        Search Google and extract result URLs using Selenium.
+        Search Google and extract result URLs using Selenium with pagination support.
         
         Args:
             query: Search query (e.g., 'site:myshopify.com "USA" intitle:"contact"')
@@ -80,13 +80,16 @@ class ShopifyContactScraper:
         Returns:
             List of URLs found
         """
-        logger.info(f"Searching Google for: {query}")
+        logger.info(f"Searching Google for: {query} (max {max_results} results)")
         
         if not self.driver:
             logger.error("WebDriver not initialized. Cannot search.")
             return []
         
         urls = []
+        seen = set()
+        page = 1
+        max_pages = (max_results + 9) // 10  # Calculate pages needed (10 results per page)
         
         try:
             # Navigate to Google
@@ -109,55 +112,115 @@ class ShopifyContactScraper:
             # Wait for results to load
             time.sleep(3)
             
-            # Extract result URLs
-            try:
-                # Wait for search results
-                WebDriverWait(self.driver, 10).until(
-                    EC.presence_of_element_located((By.ID, "search"))
-                )
+            # Loop through pages until we have enough results
+            while len(urls) < max_results and page <= max_pages:
+                logger.info(f"Extracting results from page {page}...")
                 
-                # Parse the page
-                soup = BeautifulSoup(self.driver.page_source, 'html.parser')
-                
-                # Find all result links
-                # Google uses different selectors, try multiple approaches
-                result_links = []
-                
-                # Method 1: Find divs with class containing 'g' (common for results)
-                for result in soup.select('div.g, div[data-hveid]'):
-                    link = result.find('a', href=True)
-                    if link and link['href'].startswith('http'):
-                        url = link['href']
-                        # Filter out Google's own links
-                        if not any(x in url for x in ['google.com', 'youtube.com/results']):
-                            result_links.append(url)
-                
-                # Method 2: Find all links in search results area
-                if not result_links:
-                    search_div = soup.find('div', {'id': 'search'})
-                    if search_div:
-                        for link in search_div.find_all('a', href=True):
-                            href = link['href']
-                            if href.startswith('http') and 'google.com' not in href:
-                                result_links.append(href)
-                
-                # Remove duplicates and limit results
-                seen = set()
-                for url in result_links:
-                    if url not in seen and len(urls) < max_results:
-                        urls.append(url)
-                        seen.add(url)
-                
-                logger.info(f"Found {len(urls)} results")
-                
-            except TimeoutException:
-                logger.warning("Timeout waiting for search results")
+                try:
+                    # Wait for search results
+                    WebDriverWait(self.driver, 10).until(
+                        EC.presence_of_element_located((By.ID, "search"))
+                    )
+                    
+                    # Parse the page
+                    soup = BeautifulSoup(self.driver.page_source, 'html.parser')
+                    
+                    # Find all result links
+                    result_links = []
+                    
+                    # Method 1: Find divs with class containing 'g' (common for results)
+                    for result in soup.select('div.g, div[data-hveid]'):
+                        link = result.find('a', href=True)
+                        if link and link['href'].startswith('http'):
+                            url = link['href']
+                            # Filter out Google's own links
+                            if not any(x in url for x in ['google.com', 'youtube.com/results']):
+                                result_links.append(url)
+                    
+                    # Method 2: Find all links in search results area (fallback)
+                    if not result_links:
+                        search_div = soup.find('div', {'id': 'search'})
+                        if search_div:
+                            for link in search_div.find_all('a', href=True):
+                                href = link['href']
+                                if href.startswith('http') and 'google.com' not in href:
+                                    result_links.append(href)
+                    
+                    # Add unique URLs to results
+                    page_urls_added = 0
+                    for url in result_links:
+                        if url not in seen and len(urls) < max_results:
+                            urls.append(url)
+                            seen.add(url)
+                            page_urls_added += 1
+                    
+                    logger.info(f"Page {page}: Found {page_urls_added} new results (total: {len(urls)}/{max_results})")
+                    
+                    # Check if we have enough results
+                    if len(urls) >= max_results:
+                        break
+                    
+                    # Try to go to next page
+                    if page < max_pages:
+                        next_button_found = False
+                        
+                        # Try multiple methods to find and click the "Next" button
+                        try:
+                            # Method 1: Find by ID
+                            next_button = self.driver.find_element(By.ID, "pnnext")
+                            if next_button.is_displayed():
+                                next_button.click()
+                                next_button_found = True
+                                time.sleep(3)  # Wait for next page to load
+                        except:
+                            pass
+                        
+                        if not next_button_found:
+                            try:
+                                # Method 2: Find by aria-label
+                                next_button = self.driver.find_element(By.CSS_SELECTOR, "a[aria-label*='Next']")
+                                if next_button.is_displayed():
+                                    next_button.click()
+                                    next_button_found = True
+                                    time.sleep(3)
+                            except:
+                                pass
+                        
+                        if not next_button_found:
+                            try:
+                                # Method 3: Find span with "Next" text
+                                next_spans = self.driver.find_elements(By.XPATH, "//span[text()='Next']")
+                                for span in next_spans:
+                                    parent = span.find_element(By.XPATH, "..")
+                                    if parent.tag_name == 'a':
+                                        parent.click()
+                                        next_button_found = True
+                                        time.sleep(3)
+                                        break
+                            except:
+                                pass
+                        
+                        if not next_button_found:
+                            logger.warning(f"Could not find 'Next' button on page {page}, stopping pagination")
+                            break
+                        
+                        page += 1
+                    else:
+                        break
+                        
+                except TimeoutException:
+                    logger.warning(f"Timeout waiting for search results on page {page}")
+                    break
+                except Exception as e:
+                    logger.warning(f"Error on page {page}: {e}")
+                    break
             
         except WebDriverException as e:
             logger.error(f"WebDriver error during search: {e}")
         except Exception as e:
             logger.error(f"Unexpected error during search: {e}")
         
+        logger.info(f"Search completed: Found {len(urls)} total results")
         return urls
     
     def _init_driver(self):
